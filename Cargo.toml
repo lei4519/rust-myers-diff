@@ -1,8 +1,15 @@
 [package]
 name = "rust-myers-diff"
 version = "0.1.0"
-edition = "2021"
+edition = "2018"
+authors = ["lei4519"]
+description = "rust myers diff"
+repository = "https://github.com/lei4519/rust-myers-diff"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
+serde = { version = "1.0", features = ["derive"] }
+wasm-bindgen = { version = "0.2", features = ["serde-serialize"] }

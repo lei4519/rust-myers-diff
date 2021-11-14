@@ -1,0 +1,5 @@
+{
+	"scripts": {
+		"build:wasm": "wasm-pack build --release --target nodejs --scope lei4519 && cargo build --release"
+	}
+}

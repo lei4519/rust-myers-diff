@@ -1,5 +1,7 @@
 {
 	"scripts": {
-		"build:wasm": "wasm-pack build --release --target nodejs --scope lei4519 && cargo build --release"
+		"build": "npm run build:wasm & npm run build:rustlib",
+		"build:wasm": "wasm-pack build --release --target nodejs --scope lei4519",
+		"build:rustlib": "cargo build --release"
 	}
 }

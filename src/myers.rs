@@ -2,18 +2,22 @@ use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
 /// myers 算法对比新旧文本 http://xmailserver.org/diff2.pdf
-pub fn myers(x_str: Vec<String>, y_str: Vec<String>) -> DiffResult {
-    let d_kxmap = diff(&x_str, &y_str);
-    let snakes = gen_snakes(d_kxmap, x_str.len() as isize, y_str.len() as isize);
-    resolve_result(snakes, x_str, y_str)
+///
+/// x_arr: 旧文本的字符串数组，可以按照需求进行切割（按字符、按行、按段）
+///
+/// y_arr: 新文本的字符串数组
+pub fn myers(x_arr: Vec<String>, y_arr: Vec<String>) -> Vec<DiffResult> {
+    let d_kxmap = diff(&x_arr, &y_arr);
+    let snakes = gen_snakes(d_kxmap, x_arr.len() as isize, y_arr.len() as isize);
+    resolve_result(snakes, x_arr, y_arr)
 }
 
 // diff 寻找路径
-fn diff(x_str: &Vec<String>, y_str: &Vec<String>) -> Vec<HashMap<isize, isize>> {
-    // x 文本的长度
-    let x_max = x_str.len() as isize;
-    // y 文本的长度
-    let y_max = y_str.len() as isize;
+fn diff(x_arr: &Vec<String>, y_arr: &Vec<String>) -> Vec<HashMap<isize, isize>> {
+    // x 文本数组的长度
+    let x_max = x_arr.len() as isize;
+    // y 文本数组的长度
+    let y_max = y_arr.len() as isize;
     // 图的总长度
     let g_max = x_max + y_max;
 
@@ -61,7 +65,7 @@ fn diff(x_str: &Vec<String>, y_str: &Vec<String>) -> Vec<HashMap<isize, isize>> 
             let mut y = x - k;
 
             // 相同文本情况 走斜向前进
-            while y < y_max && x < x_max && eq(x_str, y_str, x, y) {
+            while y < y_max && x < x_max && eq(x_arr, y_arr, x, y) {
                 x = x + 1;
                 y = y + 1;
             }
@@ -148,42 +152,38 @@ fn gen_snakes(d_kxmap: Vec<HashMap<isize, isize>>, x_max: isize, y_max: isize) -
     snakes
 }
 
-
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Diff {
     EQ,
     ADD,
     RM,
 }
-
-// Diff，内容，内容的开始索引，结束索引（连续的相同类型会被合并，这样字符串就丢失了索引信息）
-pub type DiffResult = Vec<(Diff, String, usize, usize)>;
+// (diff 结果，开始索引，结束索引)
+pub type DiffResult = (Diff, isize, isize);
 
 // 解析返回差异结果
-fn resolve_result(mut snakes: Snakes, x_str: Vec<String>, y_str: Vec<String>) -> DiffResult {
-    let mut result: DiffResult = vec![];
+fn resolve_result(mut snakes: Snakes, x_str: Vec<String>, y_str: Vec<String>) -> Vec<DiffResult> {
+    let mut result: Vec<DiffResult> = vec![];
 
     // x 文本的长度
     let x_max = x_str.len() as isize;
     // y 文本的长度
     let y_max = y_str.len() as isize;
 
-    let push = |result: &mut DiffResult, action: Diff, v: &str| {
+    let push = |result: &mut Vec<DiffResult>, action: Diff, i: isize| {
         if let Some(last) = result.last_mut() {
             if last.0 == action {
-                last.1 = format!("{}{}", last.1, v);
-								last.3 = last.3 + 1;
+                last.2 = i;
                 return;
             }
         }
-				let i = result.len();
-        result.push((action, v.to_string(), i, i));
+        result.push((action, i, i));
     };
 
     // 相同字符处理
-    let advance = |result: &mut DiffResult, mut x, mut y| {
+    let advance = |result: &mut Vec<DiffResult>, mut x, mut y| {
         while x < x_max && y < y_max && eq(&x_str, &y_str, x, y) {
-            push(result, Diff::EQ, x_str.get(x as usize).unwrap());
+            push(result, Diff::EQ, x);
             x = x + 1;
             y = y + 1;
         }
@@ -203,12 +203,12 @@ fn resolve_result(mut snakes: Snakes, x_str: Vec<String>, y_str: Vec<String>) ->
 
         if is_left_best {
             // 意味着向右走，删除
-            push(&mut result, Diff::RM, x_str.get(x as usize).unwrap());
+            push(&mut result, Diff::RM, x);
             x = x + 1;
             advance(&mut result, x, y);
         } else {
             // 新增
-            push(&mut result, Diff::ADD, y_str.get(y as usize).unwrap());
+            push(&mut result, Diff::ADD, y);
             y = y + 1;
             advance(&mut result, x, y);
         }
@@ -226,19 +226,28 @@ fn eq(x_str: &Vec<String>, y_str: &Vec<String>, x: isize, y: isize) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::{myers};
+    use crate::myers;
 
     use super::{Diff, DiffResult};
 
-    fn format_result(res: DiffResult) -> String {
-				println!("{:#?}", res);
-        res.iter().fold("".to_string(), |mut r, (action, v, ..)| {
-            if *action == Diff::ADD {
+    fn format_result(x_arr: Vec<String>, y_arr: Vec<String>, res: Vec<DiffResult>) -> String {
+        // "-ABC+BAB-BA+C"
+        res.iter().fold("".to_string(), |mut r, last| {
+            if last.0 == Diff::ADD {
                 r.push_str("+");
-            } else if *action == Diff::RM {
-                r.push_str("-");
+                for i in last.1..last.2 + 1 {
+                    let s  = y_arr.get(i as usize).unwrap();
+                    r.push_str(s);
+                }
+            } else {
+                if last.0 == Diff::RM  {
+                    r.push_str("-");
+                }
+                for i in last.1..last.2 + 1 {
+                    let s  = x_arr.get(i as usize).unwrap();
+                    r.push_str(s);
+                }
             }
-            r.push_str(v);
             r.push_str("\n");
             r
         })
@@ -246,21 +255,41 @@ mod test {
 
     #[test]
     fn diff() {
+        let x_arr: Vec<String> = "ABCABBA"
+        .split("")
+        .filter(|x| !x.is_empty())
+        .map(|x| x.to_string())
+        .collect();
+        let y_arr: Vec<String> = "CBABAC"
+        .split("")
+        .filter(|x| !x.is_empty())
+        .map(|x| x.to_string())
+        .collect();
         let res = myers(
-            "ABCABBA".split("").filter(|x| !x.is_empty()).map(|x|x.to_string()).collect(),
-            "CBABAC".split("").filter(|x| !x.is_empty()).map(|x|x.to_string()).collect(),
+            x_arr.clone(),
+            y_arr.clone(),
         );
 
-        assert_eq!("-AB\nC\n+B\nAB\n-B\nA\n+C\n", format_result(res));
+        assert_eq!("-AB\nC\n+B\nAB\n-B\nA\n+C\n", format_result(x_arr, y_arr, res));
     }
 
     #[test]
     fn eq() {
+        let x_arr: Vec<String> = "ABCABBA"
+        .split("")
+        .filter(|x| !x.is_empty())
+        .map(|x| x.to_string())
+        .collect();
+        let y_arr: Vec<String> = "ABCABBA"
+        .split("")
+        .filter(|x| !x.is_empty())
+        .map(|x| x.to_string())
+        .collect();
         let res = myers(
-            "ABCABBA".split("").filter(|x| !x.is_empty()).map(|x|x.to_string()).collect(),
-            "ABCABBA".split("").filter(|x| !x.is_empty()).map(|x|x.to_string()).collect(),
+            x_arr.clone(),
+            y_arr.clone(),
         );
 
-        assert_eq!("ABCABBA\n", format_result(res));
+        assert_eq!("ABCABBA\n", format_result(x_arr, y_arr, res));
     }
 }

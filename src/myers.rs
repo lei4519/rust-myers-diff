@@ -1,19 +1,19 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
 
 /// myers 算法对比新旧文本 http://xmailserver.org/diff2.pdf
 ///
 /// x_arr: 旧文本的字符串数组，可以按照需求进行切割（按字符、按行、按段）
 ///
 /// y_arr: 新文本的字符串数组
-pub fn myers(x_arr: Vec<String>, y_arr: Vec<String>) -> Vec<DiffResult> {
+pub fn myers(x_arr: &Vec<&str>, y_arr: &Vec<&str>) -> Vec<DiffResult> {
     let d_kxmap = diff(&x_arr, &y_arr);
     let snakes = gen_snakes(d_kxmap, x_arr.len() as isize, y_arr.len() as isize);
     resolve_result(snakes, x_arr, y_arr)
 }
 
 // diff 寻找路径
-fn diff(x_arr: &Vec<String>, y_arr: &Vec<String>) -> Vec<HashMap<isize, isize>> {
+fn diff(x_arr: &Vec<&str>, y_arr: &Vec<&str>) -> Vec<HashMap<isize, isize>> {
     // x 文本数组的长度
     let x_max = x_arr.len() as isize;
     // y 文本数组的长度
@@ -66,8 +66,8 @@ fn diff(x_arr: &Vec<String>, y_arr: &Vec<String>) -> Vec<HashMap<isize, isize>> 
 
             // 相同文本情况 走斜向前进
             while y < y_max && x < x_max && eq(x_arr, y_arr, x, y) {
-                x = x + 1;
-                y = y + 1;
+                x += 1;
+                y += 1;
             }
 
             // 记录
@@ -78,9 +78,9 @@ fn diff(x_arr: &Vec<String>, y_arr: &Vec<String>) -> Vec<HashMap<isize, isize>> 
                 return d_kxmap;
             }
 
-            k = k + 2;
+            k += 2;
         }
-        d = d + 1;
+        d += 1;
     }
     d_kxmap
 }
@@ -108,7 +108,7 @@ fn gen_snakes(d_kxmap: Vec<HashMap<isize, isize>>, x_max: isize, y_max: isize) -
         let kx_map = d_kxmap.get(d - 1).unwrap();
         // 在上一个点向下走过来（k + 1）
         let up_x = kx_map.get(&(k + 1)).map_or(-1, |x| *x);
-        // 在上一个点向右走过来 (k - 1)
+        // 在上一个点向右走过来 (k - 2)
         let left_x = kx_map.get(&(k - 1)).map_or(-1, |x| *x);
 
         // 两个都没有，说明已经到头了
@@ -147,7 +147,7 @@ fn gen_snakes(d_kxmap: Vec<HashMap<isize, isize>>, x_max: isize, y_max: isize) -
         x = pre_x;
         y = pre_y;
 
-        d = d - 1;
+        d -= 1;
     }
     snakes
 }
@@ -155,14 +155,14 @@ fn gen_snakes(d_kxmap: Vec<HashMap<isize, isize>>, x_max: isize, y_max: isize) -
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Diff {
     EQ,
-    ADD,
+    Add,
     RM,
 }
 // (diff 结果，开始索引，结束索引)
 pub type DiffResult = (Diff, isize, isize);
 
 // 解析返回差异结果
-fn resolve_result(mut snakes: Snakes, x_str: Vec<String>, y_str: Vec<String>) -> Vec<DiffResult> {
+fn resolve_result(mut snakes: Snakes, x_str: &Vec<&str>, y_str: &Vec<&str>) -> Vec<DiffResult> {
     let mut result: Vec<DiffResult> = vec![];
 
     // x 文本的长度
@@ -184,8 +184,8 @@ fn resolve_result(mut snakes: Snakes, x_str: Vec<String>, y_str: Vec<String>) ->
     let advance = |result: &mut Vec<DiffResult>, mut x, mut y| {
         while x < x_max && y < y_max && eq(&x_str, &y_str, x, y) {
             push(result, Diff::EQ, x);
-            x = x + 1;
-            y = y + 1;
+            x += 1;
+            y += 1;
         }
     };
 
@@ -208,7 +208,7 @@ fn resolve_result(mut snakes: Snakes, x_str: Vec<String>, y_str: Vec<String>) ->
             advance(&mut result, x, y);
         } else {
             // 新增
-            push(&mut result, Diff::ADD, y);
+            push(&mut result, Diff::Add, y);
             y = y + 1;
             advance(&mut result, x, y);
         }
@@ -218,7 +218,7 @@ fn resolve_result(mut snakes: Snakes, x_str: Vec<String>, y_str: Vec<String>) ->
 }
 
 // 判断是否相等
-fn eq(x_str: &Vec<String>, y_str: &Vec<String>, x: isize, y: isize) -> bool {
+fn eq(x_str: &Vec<&str>, y_str: &Vec<&str>, x: isize, y: isize) -> bool {
     let x = x_str.get(x as usize).map_or("", |x| x);
     let y = y_str.get(y as usize).map_or("", |y| y);
     x == y
@@ -230,66 +230,120 @@ mod test {
 
     use super::{Diff, DiffResult};
 
-    fn format_result(x_arr: Vec<String>, y_arr: Vec<String>, res: Vec<DiffResult>) -> String {
+    fn format_result(x_arr: &Vec<&str>, y_arr: &Vec<&str>, res: Vec<DiffResult>) -> String {
         // "-ABC+BAB-BA+C"
         res.iter().fold("".to_string(), |mut r, last| {
-            if last.0 == Diff::ADD {
-                r.push_str("+");
+            if last.0 == Diff::Add {
+                r.push('+');
                 for i in last.1..last.2 + 1 {
-                    let s  = y_arr.get(i as usize).unwrap();
+                    let s = y_arr.get(i as usize).unwrap();
                     r.push_str(s);
                 }
             } else {
-                if last.0 == Diff::RM  {
-                    r.push_str("-");
+                if last.0 == Diff::RM {
+                    r.push('-');
                 }
                 for i in last.1..last.2 + 1 {
-                    let s  = x_arr.get(i as usize).unwrap();
+                    let s = x_arr.get(i as usize).unwrap();
                     r.push_str(s);
                 }
             }
-            r.push_str("\n");
+            r.push('\n');
             r
         })
     }
 
+    fn print_result(res: String) {
+        res.chars().collect::<Vec<char>>().iter().for_each(|c| {
+            if c == &'+' {
+                print!("\x1b[32m{}\x1b[0m", c);
+            } else if c == &'-' {
+                print!("\x1b[31m{}\x1b[0m", c);
+            } else {
+                print!("{}", c);
+            }
+        });
+    }
+
     #[test]
     fn diff() {
-        let x_arr: Vec<String> = "ABCABBA"
-        .split("")
-        .filter(|x| !x.is_empty())
-        .map(|x| x.to_string())
-        .collect();
-        let y_arr: Vec<String> = "CBABAC"
-        .split("")
-        .filter(|x| !x.is_empty())
-        .map(|x| x.to_string())
-        .collect();
-        let res = myers(
-            x_arr.clone(),
-            y_arr.clone(),
-        );
+        let x_arr = "ABCABBA".split("").filter(|x| !x.is_empty()).collect();
 
-        assert_eq!("-AB\nC\n+B\nAB\n-B\nA\n+C\n", format_result(x_arr, y_arr, res));
+        let y_arr = "CBABAC".split("").filter(|x| !x.is_empty()).collect();
+
+        let res = myers(&x_arr, &y_arr);
+
+        assert_eq!(
+            "-AB\nC\n+B\nAB\n-B\nA\n+C\n",
+            format_result(&x_arr, &y_arr, res)
+        );
     }
 
     #[test]
     fn eq() {
-        let x_arr: Vec<String> = "ABCABBA"
-        .split("")
-        .filter(|x| !x.is_empty())
-        .map(|x| x.to_string())
-        .collect();
-        let y_arr: Vec<String> = "ABCABBA"
-        .split("")
-        .filter(|x| !x.is_empty())
-        .map(|x| x.to_string())
-        .collect();
-        let res = myers(
-            x_arr.clone(),
-            y_arr.clone(),
-        );
+        let x_arr = "ABCABBA".split("").filter(|x| !x.is_empty()).collect();
+        let y_arr = "ABCABBA".split("").filter(|x| !x.is_empty()).collect();
+        let res = myers(&x_arr, &y_arr);
 
-        assert_eq!("ABCABBA\n", format_result(x_arr, y_arr, res));
+        assert_eq!("ABCABBA\n", format_result(&x_arr, &y_arr, res));
+    }
+
+    #[test]
+    fn test_diff() {
+        let x_arr = "0123456".split("").collect();
+        let y_arr = "0156342"
+            // let y_arr = "先进的发展中国家有：中国、俄罗斯、巴西等"
+            .split("")
+            .collect();
+        let res = myers(&x_arr, &y_arr);
+
+        print_result(format_result(&x_arr, &y_arr, res));
+    }
+
+    struct Anno {
+        start: isize,
+        end: isize,
+    }
+
+    impl Anno {
+        fn new(start: isize, end: isize) -> Self {
+            Self { start, end }
+        }
+    }
+
+    #[test]
+    fn test_remarks() {
+        let x_arr = "- 文章变化后，不知道变化了什么？
+- 如果可以知道变化了什么，就可以解决
+- 利用 diff 精确匹配
+	- 这样我们就可以感知到文本的具体变化（也就是上下文）
+	- 如果diff之后当前位置没有发生改动，就可以回显。如果发生了变化，则不回显
+"
+        .split("")
+        .filter(|x| !x.is_empty())
+        .collect();
+
+        let y_arr = "- 123文章变化后，不变化了什么？
+- 如果可以知123变化道什么，就可以解决
+- 利用 diff 精确匹配
+	- 这样我们就可以感知到文本的具体（也就是上下文）
+8674 - 如果diff之后当前位置没有发生改动，就可以回显。如果发生了变化，则不回显123
+"
+        .split("")
+        .filter(|x| !x.is_empty())
+        .collect();
+        let res = myers(&x_arr, &y_arr);
+
+        let annos = vec![
+            Anno::new(4, 6),
+            Anno::new(11, 13),
+            Anno::new(26, 28),
+            Anno::new(71, 73),
+            Anno::new(115, 117),
+        ];
+
+        println!("{:#?}", res);
+
+        print_result(format_result(&x_arr, &y_arr, res));
     }
 }

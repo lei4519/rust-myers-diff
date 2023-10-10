@@ -1,11 +1,8 @@
-extern crate wasm_bindgen;
-
-use myers::{myers};
-use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-pub mod myers;
+use myers::{myers, DiffResult};
 
+pub mod myers;
 
 #[wasm_bindgen(typescript_custom_section)]
 const TYPESCRIPT_CUSTOM_SECTION: &'static str = r#"
@@ -34,15 +31,12 @@ extern "C" {
     pub type DiffResultType;
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct Params {
-    pub old_arr: Vec<String>,
-    pub new_arr: Vec<String>,
+pub struct Params<'a> {
+    pub old_arr: &'a Vec<&'a str>,
+    pub new_arr: &'a Vec<&'a str>,
 }
 
-#[wasm_bindgen]
-pub fn diff(params: ParamsType) -> DiffResultType {
-    let params: Params = params.into_serde().unwrap();
-    let res = myers(params.old_arr, params.new_arr);
-    DiffResultType::from(JsValue::from_serde(&res).unwrap())
+// #[wasm_bindgen]
+pub fn diff(params: Params) -> Vec<DiffResult> {
+    myers(params.old_arr, params.new_arr)
 }
